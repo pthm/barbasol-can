@@ -18,4 +18,10 @@ assert(H.pi_name("π - proj", "/w/proj") == nil)       -- unnamed
 assert(H.pi_name("π - fix - other", "/w/proj") == nil) -- title for another cwd
 assert(H.pi_name(nil, "/w/proj") == nil)
 
+-- Linux reports the cwd of a process whose directory was deleted (and maybe recreated) with a suffix.
+assert(H.live_cwd("/w/proj (deleted)") == "/w/proj")
+assert(H.live_cwd("/w/proj") == "/w/proj")
+assert(H.live_cwd("/w/proj (deleted)/sub") == "/w/proj (deleted)/sub") -- only a trailing suffix
+assert(H.live_cwd(nil) == nil)
+
 return "ok"

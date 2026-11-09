@@ -181,6 +181,12 @@ resumed; exec opencode -s "$id"
 ]],
 }
 
+-- Linux appends " (deleted)" to the cwd of a process whose directory was removed,
+-- even when it was recreated since. The path without it is the one the harness recorded.
+function H.live_cwd(cwd)
+  return cwd and (cwd:gsub(" %(deleted%)$", ""))
+end
+
 -- Pi runs under node, but sets its process title (and so argv0) to "pi".
 local function is_pi(fg)
   return fg.name == "pi" or ((fg.argv0 or ""):match("([^/]*)$") == "pi")
@@ -214,8 +220,9 @@ H.pi = {
   --  * Unnamed: the sessions here with no name written since it started.
   -- If that leaves more than one, it won't guess.
   session = function(fg, title)
-    local dir = pi_dir(fg.cwd)
-    local want = H.pi_name(title, fg.cwd)
+    local cwd = H.live_cwd(fg.cwd)
+    local dir = pi_dir(cwd)
+    local want = H.pi_name(title, cwd)
     local function list(script, ...)
       local out = {}
       for p in sh(script, ...):gmatch("[^\n]+") do out[#out + 1] = p end
@@ -233,7 +240,7 @@ H.pi = {
       local first = f and f:read("*l")
       if f then f:close() end
       local hdr = first and rex.json.decode(first)
-      return hdr and hdr.type == "session" and hdr.cwd == fg.cwd and hdr or nil
+      return hdr and hdr.type == "session" and hdr.cwd == cwd and hdr or nil
     end
     local function pick(paths)
       local out = {}
@@ -258,7 +265,7 @@ H.pi = {
       return nil, want and ("no pi session here is named \"" .. want .. "\"")
         or "pi hasn't saved a session yet; send a message first"
     end
-    return header(found[1]).id, fg.cwd, want
+    return header(found[1]).id, cwd, want
   end,
   -- A session is one JSONL file in the directory its cwd maps to. Its header
   -- records the cwd, so the import rewrites that to the target directory.
