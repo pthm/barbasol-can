@@ -181,7 +181,115 @@ resumed; exec opencode -s "$id"
 ]],
 }
 
-H.order = { "claude", "codex", "opencode" }
+-- Linux appends " (deleted)" to the cwd of a process whose directory was removed,
+-- even when it was recreated since. The path without it is the one the harness recorded.
+function H.live_cwd(cwd)
+  return cwd and (cwd:gsub(" %(deleted%)$", ""))
+end
+
+-- Pi runs under node, but sets its process title (and so argv0) to "pi".
+local function is_pi(fg)
+  return fg.name == "pi" or ((fg.argv0 or ""):match("([^/]*)$") == "pi")
+end
+
+-- Pi names a session's directory after its cwd: leading separator dropped, then
+-- "/", "\" and ":" as "-", wrapped in "--".
+local function pi_dir(cwd)
+  return HOME .. "/.pi/agent/sessions/--" .. cwd:gsub("^[/\\]", ""):gsub("[/\\:]", "-") .. "--"
+end
+
+-- Pi titles its terminal "π - <session name> - <cwd basename>", or without the
+-- name for an unnamed session. The session name, or nil.
+function H.pi_name(title, cwd)
+  local base = cwd:match("([^/]*)/*$")
+  local rest = title and title:match("^%S+ %- (.*)$")
+  local tail = " - " .. base
+  if not rest or rest:sub(-#tail) ~= tail then return nil end
+  local name = rest:sub(1, -#tail - 1)
+  return name ~= "" and name or nil
+end
+
+H.pi = {
+  bin = "pi",
+  match = is_pi,
+  -- Pi doesn't record which process has which session, so this infers it from the
+  -- process's cwd (Pi keeps a session in the directory its cwd maps to), when the
+  -- process started, and the terminal title, which carries the session's name:
+  --  * Named: the sessions in this cwd with that name; if a fork shares it, only
+  --    those written since this process started.
+  --  * Unnamed: the sessions here with no name written since it started.
+  -- If that leaves more than one, it won't guess.
+  session = function(fg, title)
+    local cwd = H.live_cwd(fg.cwd)
+    local dir = pi_dir(cwd)
+    local want = H.pi_name(title, cwd)
+    local function list(script, ...)
+      local out = {}
+      for p in sh(script, ...):gmatch("[^\n]+") do out[#out + 1] = p end
+      return out
+    end
+    -- Each session's latest name: grep -H lists a file's session_info entries in order.
+    local names = {}
+    for line in sh([[find "$1" -name '*.jsonl' -exec grep -H '"type":"session_info"' {} +]], dir):gmatch("[^\n]+") do
+      local path, json = line:match("^(.-%.jsonl):(.*)$")
+      local e = path and rex.json.decode(json)
+      if e then names[path] = e.name end
+    end
+    local function header(path)
+      local f = io.open(path)
+      local first = f and f:read("*l")
+      if f then f:close() end
+      local hdr = first and rex.json.decode(first)
+      return hdr and hdr.type == "session" and hdr.cwd == cwd and hdr or nil
+    end
+    local function pick(paths)
+      local out = {}
+      for _, path in ipairs(paths) do
+        if names[path] == want and header(path) then out[#out + 1] = path end
+      end
+      return out
+    end
+    local mins = tostring(math.ceil((age(fg.pid) or 0) / 60) + 1)
+    local recent = list([[find "$1" -name '*.jsonl' -mmin -"$2"]], dir, mins)
+    local found
+    if want then
+      local named = {}
+      for path, name in pairs(names) do if name == want then named[#named + 1] = path end end
+      found = pick(named)
+      if #found > 1 then found = pick(recent) end
+    else
+      found = pick(recent)
+    end
+    if #found > 1 then return nil, "several pi sessions here could be this one; name it with /name to tell them apart" end
+    if #found == 0 then
+      return nil, want and ("no pi session here is named \"" .. want .. "\"")
+        or "pi hasn't saved a session yet; send a message first"
+    end
+    return header(found[1]).id, cwd, want
+  end,
+  -- A session is one JSONL file in the directory its cwd maps to. Its header
+  -- records the cwd, so the import rewrites that to the target directory.
+  export = [[
+f=$(find "$HOME/.pi/agent/sessions" -name "*_$1.jsonl" | head -n 1)
+test -n "$f" || { echo "no pi session $1" >&2; exit 1; }
+cd "$(dirname "$f")" && tar czf - "$(basename "$f")"
+]],
+  import = [[
+p="$HOME/.pi/agent/sessions/--$(printf %s "$to" | sed 's|^[/\\]||; s|[/\\:]|-|g')--"
+mkdir -p "$p" || fail "couldn't make $p"
+json=$(printf %s "$to" | sed 's/\\/\\\\/g; s/"/\\"/g')
+for f in "$t"/*.jsonl; do
+  CWD="$json" awk 'NR == 1 && match($0, /"cwd":"([^"\\]|\\.)*"/) {
+    $0 = substr($0, 1, RSTART - 1) "\"cwd\":\"" ENVIRON["CWD"] "\"" substr($0, RSTART + RLENGTH)
+  } { print }' "$f" > "$p/${f##*/}" || fail "couldn't copy the session into $p"
+  s="$p/${f##*/}"
+done
+cd "$to" || fail "no directory $to"
+resumed; exec pi --session "$s"
+]],
+}
+
+H.order = { "claude", "codex", "opencode", "pi" }
 
 -- The harness running in the foreground process, as name, harness.
 function H.detect(fg)

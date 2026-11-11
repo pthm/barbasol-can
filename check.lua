@@ -12,4 +12,16 @@ assert(not H.codex_exec('/bin/codex "exec the test suite"'))
 assert(not H.codex_exec("/bin/codex -C /work/exec tools"))
 assert(not H.codex_exec("/bin/codex resume 01a0f5d2-d190-7461-9540-3c618e1fea5e"))
 
+assert(H.pi_name("π - fix bug - barbasol-can", "/w/barbasol-can") == "fix bug")
+assert(H.pi_name("π - a - b - proj", "/w/proj/") == "a - b")
+assert(H.pi_name("π - proj", "/w/proj") == nil)       -- unnamed
+assert(H.pi_name("π - fix - other", "/w/proj") == nil) -- title for another cwd
+assert(H.pi_name(nil, "/w/proj") == nil)
+
+-- Linux reports the cwd of a process whose directory was deleted (and maybe recreated) with a suffix.
+assert(H.live_cwd("/w/proj (deleted)") == "/w/proj")
+assert(H.live_cwd("/w/proj") == "/w/proj")
+assert(H.live_cwd("/w/proj (deleted)/sub") == "/w/proj (deleted)/sub") -- only a trailing suffix
+assert(H.live_cwd(nil) == nil)
+
 return "ok"

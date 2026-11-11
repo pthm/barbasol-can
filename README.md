@@ -1,7 +1,7 @@
 # barbasol-can
 
 A [Rex](https://www.superlogical.com/rex) plugin that moves a running agent
-session to another Rex host. It supports Claude Code, Codex and opencode.
+session to another Rex host. It supports Claude Code, Codex, opencode and pi.
 
 https://github.com/user-attachments/assets/4a40af18-d99b-4a56-8927-b5eb9f68a2e6
 
@@ -48,6 +48,7 @@ newest:
 | Claude Code | `~/.claude/sessions/<pid>.json` |
 | Codex | Its logs (`pid:<pid>` with the thread) when the thread runs in-process; otherwise the pane title (`<thread name> \| <dir>`) matched against the thread names in that directory; otherwise `codex resume <id>` in its arguments |
 | opencode | The `run=` in its shared log that started with the process, and the last session that run worked on; otherwise `-s <id>` in its arguments. The pane title (`OC \| <title>`) must agree |
+| pi | Pi records no process-to-session mapping, so it's inferred: session files for the process's directory whose header `cwd` matches, narrowed by the session name in the pane title (`π - <name> - <dir>`) and, if several share it, by being written since the process started. If still ambiguous it refuses; `/name` the session to tell them apart |
 
 ## Moving it
 
@@ -60,6 +61,7 @@ agent's way, and resumes it:
 | Claude Code | `~/.claude/projects/<dir>/<id>.jsonl` and its `<id>/` folder | Copied under the target directory's project, `claude --resume <id>` |
 | Codex | The thread's rollout file in `~/.codex/sessions/` | Copied to the same path, `codex resume -C <dir> <id>` |
 | opencode | `opencode export <id>` | `opencode import` in the target directory, `opencode -s <id>` |
+| pi | The session's `.jsonl` in `~/.pi/agent/sessions/` | Copied under the target directory's folder with the header `cwd` rewritten, `pi --session <file>` |
 
 The receiver reports how it ended as a Rex program status record: `done`
 just before it starts the agent, or `error` with the reason. The picker waits

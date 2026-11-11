@@ -1,5 +1,5 @@
 -- barbasol_can: a Rex plugin that moves a running agent session (Claude Code,
--- Codex or opencode) to another host.
+-- Codex, opencode or pi) to another host.
 --
 -- Adds "Move Agent Session…" to the command palette. Run it on a pane running
 -- an agent; a floating picker asks for the host, a Rex session and a directory
@@ -20,13 +20,13 @@ rex.action{
   name = "barbasol_can",
   title = "Move Agent Session…",
   category = "Agents",
-  keywords = "claude codex opencode agent session move push resume transfer host",
+  keywords = "claude codex opencode pi agent session move push resume transfer host",
   run = function(ctx)
     local p = rex.block.call(T, "process", { block_id = ctx.block_id })
     local fg = p and p.foreground
     local name, h = H.detect(fg)
     if not h then
-      error("Nothing to move: this pane isn't running Claude Code, Codex or opencode", 0)
+      error("Nothing to move: this pane isn't running Claude Code, Codex, opencode or pi", 0)
     end
     local t = rex.block.call(T, "title", { block_id = ctx.block_id })
     local id, cwd, title = h.session(fg, t and t.title)
